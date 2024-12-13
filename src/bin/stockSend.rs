@@ -1,145 +1,135 @@
-use amiquip::{Connection, Exchange, Publish, Result};
+use lapin::{
+    options::*,
+    types::FieldTable,
+    BasicProperties, Channel, Connection, ConnectionProperties, ExchangeKind,
+};
 use serde::{Deserialize, Serialize};
-use std::{thread, time};
+use tokio::time;
+use std::time::Duration;
 use rand::Rng;
 
-fn main() -> Result<()> {
-    // Open a connection to RabbitMQ server
-    let mut connection = Connection::insecure_open("amqp://guest:guest@localhost:5672")?;
-
-    // Open a channel - None says let the library choose the channel ID.
-    let channel = connection.open_channel(None)?;
-
-    // Get a handle to the direct exchange on our channel.
-    let exchange = Exchange::direct(&channel);
-
-    // Infinite loop to publish stock updates every 1 seconds
-    loop {
-        // Define the initial stock data
-        let mut stocks = vec![
-            Stock {
-                symbol: "AAPL".to_string(),
-                price: 175.32,
-                price_change: PriceChange {
-                    percentage: 0.85,
-                    absolute: 1.48,
-                },
-            },
-            Stock {
-                symbol: "MSFT".to_string(),
-                price: 348.15,
-                price_change: PriceChange {
-                    percentage: 1.12,
-                    absolute: 3.87,
-                },
-            },
-            Stock {
-                symbol: "GOOGL".to_string(),
-                price: 138.22,
-                price_change: PriceChange {
-                    percentage: 0.98,
-                    absolute: 1.34,
-                },
-            },
-            Stock {
-                symbol: "AMZN".to_string(),
-                price: 143.55,
-                price_change: PriceChange {
-                    percentage: -0.45,
-                    absolute: -0.65,
-                },
-            },
-            Stock {
-                symbol: "META".to_string(),
-                price: 303.21,
-                price_change: PriceChange {
-                    percentage: 1.45,
-                    absolute: 4.33,
-                },
-            },
-            Stock {
-                symbol: "TSLA".to_string(),
-                price: 245.67,
-                price_change: PriceChange {
-                    percentage: -1.23,
-                    absolute: -3.06,
-                },
-            },
-            Stock {
-                symbol: "NVDA".to_string(),
-                price: 478.29,
-                price_change: PriceChange {
-                    percentage: 2.10,
-                    absolute: 9.84,
-                },
-            },
-            Stock {
-                symbol: "NFLX".to_string(),
-                price: 420.14,
-                price_change: PriceChange {
-                    percentage: 0.68,
-                    absolute: 2.85,
-                },
-            },
-            Stock {
-                symbol: "DIS".to_string(),
-                price: 88.45,
-                price_change: PriceChange {
-                    percentage: -0.98,
-                    absolute: -0.87,
-                },
-            },
-            Stock {
-                symbol: "BAC".to_string(),
-                price: 28.95,
-                price_change: PriceChange {
-                    percentage: 0.35,
-                    absolute: 0.10,
-                },
-            },
-        ];
-
-        // Update the price of each stock by -10%, +10%, or remain the same
-        for stock in &mut stocks {
-            let mut rng = rand::thread_rng();
-            let change_factor: f64 = rng.gen_range(-0.10..=0.10); // Generate a random change factor between -10% and +10%
-
-            // Calculate new price
-            let new_price = stock.price * (1.0 + change_factor);
-
-            // Update the stock with the new price and set price change details
-            let price_change_absolute = new_price - stock.price;
-            let price_change_percentage = (price_change_absolute / stock.price) * 100.0;
-
-            stock.price = new_price;
-            stock.price_change = PriceChange {
-                percentage: price_change_percentage,
-                absolute: price_change_absolute,
-            };
-        }
-
-        // Serialize the stock data to JSON
-        let serialized_stocks = serde_json::to_string(&stocks).unwrap();
-
-        // Publish the stock data to the "stocks" queue
-        exchange.publish(Publish::new(serialized_stocks.as_bytes(), "stocks")).unwrap();
-
-        println!("Published updated stock prices to the queue.");
-
-        // Wait for 1 seconds before sending the next update
-        thread::sleep(time::Duration::from_secs(1));
-    }
-}
-
-#[derive(Serialize, Debug, Deserialize)]
+#[derive(Serialize, Debug, Deserialize, Clone)]
 struct Stock {
     symbol: String,
     price: f64,
     price_change: PriceChange,
 }
 
-#[derive(Serialize, Debug, Deserialize)]
+#[derive(Serialize, Debug, Deserialize, Clone)]
 struct PriceChange {
     percentage: f64,
     absolute: f64,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Open a connection to RabbitMQ server
+    let conn = Connection::connect(
+        "amqp://guest:guest@localhost:5672/%2f",
+        ConnectionProperties::default(),
+    )
+    .await?;
+
+    // Open a channel
+    let channel = conn.create_channel().await?;
+
+    // Declare the "stocks_exchange" exchange
+    channel
+        .exchange_declare(
+            "stocks_exchange",
+            ExchangeKind::Direct,
+            ExchangeDeclareOptions::default(),
+            FieldTable::default(),
+        )
+        .await?;
+
+    // Declare the "stocks" queue and bind it to the exchange
+    channel
+        .queue_declare(
+            "stocks",
+            QueueDeclareOptions::default(),
+            FieldTable::default(),
+        )
+        .await?;
+    channel
+        .queue_bind(
+            "stocks",
+            "stocks_exchange",
+            "stocks",
+            QueueBindOptions::default(),
+            FieldTable::default(),
+        )
+        .await?;
+
+    // Define the initial stock data
+    let mut stocks = vec![
+        Stock {
+            symbol: "AAPL".to_string(),
+            price: 175.32,
+            price_change: PriceChange {
+                percentage: 0.0,
+                absolute: 0.0,
+            },
+        },
+        // Add other stocks as needed
+    ];
+
+    // Publish the initial open market prices of all stocks
+    let serialized_stocks = serde_json::to_vec(&stocks)?;
+    publish_message(&channel, &serialized_stocks).await?;
+    println!("Published open market prices of all stocks.");
+
+    // Infinite loop to publish updates with changed prices only
+    loop {
+        let mut changed_stocks = Vec::new();
+
+        // Update the price of some stocks randomly
+        let mut rng = rand::thread_rng();
+        for stock in &mut stocks {
+            let should_change = rng.gen_bool(0.2); // 20% chance to change the stock price
+            if should_change {
+                let change_factor: f64 = rng.gen_range(-0.10..=0.10); // Between -10% and +10%
+                let new_price = stock.price * (1.0 + change_factor);
+                let price_change_absolute = new_price - stock.price;
+                let price_change_percentage = (price_change_absolute / stock.price) * 100.0;
+
+                stock.price = new_price;
+                stock.price_change = PriceChange {
+                    percentage: price_change_percentage,
+                    absolute: price_change_absolute,
+                };
+
+                // Add to the list of changed stocks
+                changed_stocks.push(stock.clone());
+            }
+        }
+
+        // Only publish if there are changed stocks
+        if !changed_stocks.is_empty() {
+            let serialized_changes = serde_json::to_vec(&changed_stocks)?;
+            publish_message(&channel, &serialized_changes).await?;
+            println!("Published updated stock prices: {:?}", changed_stocks);
+        }
+
+        // Wait for 1 second before sending the next update
+        time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+async fn publish_message(
+    channel: &Channel,
+    message: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    channel
+        .basic_publish(
+            "stocks_exchange",
+            "stocks",
+            BasicPublishOptions::default(),
+            message,
+            BasicProperties::default(),
+        )
+        .await?
+        .await?; // Wait for the confirmation from the broker
+
+    Ok(())
 }

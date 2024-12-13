@@ -1,35 +1,42 @@
-use tokio::sync::broadcast;
-use amiquip::Result;
-use tokio::time::{sleep, Duration};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{broadcast, RwLock, Barrier};
 
 mod stock_listener;
-use stock_listener::run_stock_listener;
+use stock_listener::{run_stock_listener, StockStore};
 
-// Import the brokers module
 mod brokers;
 use brokers::run_brokers;
 
-// Import the models module to use the Stock struct
+mod traders;
 mod models;
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    // Create a broadcast channel to communicate stock price updates to all brokers
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx, _rx) = broadcast::channel(16);
+    let stock_store: StockStore = Arc::new(RwLock::new(HashMap::new()));
+    let barrier = Arc::new(Barrier::new(6)); // 5 brokers + 1 for the main task
 
-    // Spawn a task to listen to RabbitMQ for stock prices
     let tx_clone = tx.clone();
+    let stock_store_clone = stock_store.clone();
+    let barrier_clone = barrier.clone();
+
+    // Spawn the stock listener asynchronously
     tokio::spawn(async move {
-        if let Err(e) = run_stock_listener(tx_clone).await {
+        if let Err(e) = run_stock_listener(tx_clone, stock_store_clone).await {
             eprintln!("RabbitMQ Listener Error: {:?}", e);
         }
     });
 
-    // Run brokers in parallel - pass the sender part of the broadcast channel
-    run_brokers(tx).await;
+    // Run brokers
+    run_brokers(tx, barrier).await;
 
-    // Keep the program alive
-    loop {
-        sleep(Duration::from_secs(10)).await;
-    }
+    // Wait for all brokers to start
+    barrier_clone.wait().await;
+
+    // Prevent the main function from exiting
+    tokio::signal::ctrl_c().await?;
+    println!("Shutting down...");
+
+    Ok(())
 }
