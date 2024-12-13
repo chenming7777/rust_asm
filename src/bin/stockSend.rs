@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stocks = vec![
         Stock {
             symbol: "AAPL".to_string(),
-            price: 175.32,
+            price: 100.00,
             price_change: PriceChange {
                 percentage: 0.0,
                 absolute: 0.0,
