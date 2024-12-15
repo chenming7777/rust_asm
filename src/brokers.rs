@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Barrier, mpsc};
+use tokio::sync::{broadcast, Barrier, mpsc, Mutex};
 use tokio::time::{sleep, Duration};
 use crate::models::{Stock, OrderType};
-use crate::traders::run_trader;
+use crate::traders::{run_trader,Trader};
+use crate::color::print_colored;
 
 // Broker function: Handles stock updates and broadcasts them to traders
-pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>) {
-    for i in 1..=5 {
-        let broker_id = format!("B{:03}", i);
+pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, traders: Vec<Arc<Mutex<Trader>>>) {
+    for i in 0..5 {
+        let broker_id = format!("B{:03}", i + 1);
         let mut stock_rx = tx.subscribe(); // Subscribe each broker to the broadcast channel
         let barrier_clone = barrier.clone();
 
@@ -20,20 +21,25 @@ pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>) {
         // Create a channel for orders from traders to the broker
         let (order_tx, mut order_rx) = mpsc::channel(16);
 
+        // Assign traders to this broker
+        let trader1 = traders[i * 3].clone();
+        let trader2 = traders[i * 3 + 1].clone();
+        let trader3 = traders[i * 3 + 2].clone();
+
         // Maintain a HashMap of stock symbols to their latest prices
         let mut stock_prices: HashMap<String, f64> = HashMap::new();
 
         // Spawn the broker task
         tokio::spawn(async move {
-            println!("Broker {} started.", broker_id);
+            print_colored(&format!("Broker {} started.", broker_id), "cyan");
 
             // Wait at the barrier
             barrier_clone.wait().await;
 
             // Spawn three traders for each broker
-            tokio::spawn(run_trader(format!("{}-T001", broker_id), trader_rx1, order_tx.clone()));
-            tokio::spawn(run_trader(format!("{}-T002", broker_id), trader_rx2, order_tx.clone()));
-            tokio::spawn(run_trader(format!("{}-T003", broker_id), trader_rx3, order_tx.clone()));
+            tokio::spawn(run_trader(format!("{}-T001", broker_id), trader_rx1, order_tx.clone(), trader1.clone()));
+            tokio::spawn(run_trader(format!("{}-T002", broker_id), trader_rx2, order_tx.clone(), trader2.clone()));
+            tokio::spawn(run_trader(format!("{}-T003", broker_id), trader_rx3, order_tx.clone(), trader3.clone()));
 
             loop {
                 tokio::select! {

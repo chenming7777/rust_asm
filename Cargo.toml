@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+colored = "2.1.0"
+futures = "0.3.31"
 futures-util = "0.3.31"
 lapin = "2.5.0"
 nom = "7.1.3"

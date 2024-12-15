@@ -1,5 +1,3 @@
-// models.rs
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -28,33 +26,6 @@ pub struct Order {
 pub enum OrderType {
     MarketBuy,
     LimitBuy,
-    Sell,
-}
-
-#[derive(Debug, Clone)]
-pub struct Trader {
-    pub id: String,
-    pub cash: f64,
-    pub portfolio: Vec<Stock>,
-}
-
-impl Trader {
-    pub fn new(id: String) -> Self {
-        Self {
-            id,
-            cash: 5000.0, // Default cash amount
-            portfolio: Vec::new(),
-        }
-    }
-
-    pub fn buy_stock(&mut self, stock: Stock, quantity: u32) -> Result<(), String> {
-        let total_cost = stock.price * quantity as f64;
-        if self.cash >= total_cost {
-            self.cash -= total_cost;
-            self.portfolio.push(stock);
-            Ok(())
-        } else {
-            Err(format!("Trader {} does not have enough cash to buy {} shares of {}", self.id, quantity, stock.symbol))
-        }
-    }
+    MarketSell,
+    LimitSell,
 }
