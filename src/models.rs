@@ -1,19 +1,19 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] // Derive PartialEq
 pub struct Stock {
     pub symbol: String,
     pub price: f64,
     pub price_change: PriceChange,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] // Derive PartialEq
 pub struct PriceChange {
     pub percentage: f64,
     pub absolute: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] // Derive PartialEq
 pub struct Order {
     pub trader_id: String,
     pub stock_symbol: String,
@@ -22,7 +22,7 @@ pub struct Order {
     pub limit_price: Option<f64>, // Optional limit price for limit orders
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)] // Derive PartialEq
 pub enum OrderType {
     MarketBuy,
     LimitBuy,

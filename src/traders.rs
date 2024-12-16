@@ -28,8 +28,21 @@ impl Trader {
         let total_cost = stock.price * quantity as f64;
         if self.cash >= total_cost {
             self.cash -= total_cost;
-            for _ in 0..quantity {
-                self.portfolio.push(stock.clone());
+            let mut found = false;
+            for held_stock in &mut self.portfolio {
+                if held_stock.symbol == stock.symbol {
+                    let total_quantity = held_stock.price * held_stock.price_change.absolute + stock.price * quantity as f64;
+                    let new_quantity = held_stock.price_change.absolute + quantity as f64;
+                    held_stock.price = total_quantity / new_quantity;
+                    held_stock.price_change.absolute = new_quantity;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                let mut new_stock = stock.clone();
+                new_stock.price_change.absolute = quantity as f64;
+                self.portfolio.push(new_stock);
             }
             Ok(())
         } else {
@@ -77,6 +90,10 @@ impl Trader {
                 self.sell_stock(&order.stock_symbol, order.quantity).map(|_| ())
             }
         }
+    }
+
+    pub fn remove_pending_order(&mut self, order: &Order) {
+        self.pending_orders.retain(|o| o != order);
     }
 
     pub fn cancel_pending_orders(&mut self) {

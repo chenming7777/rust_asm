@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, Barrier, mpsc, Mutex};
 use tokio::time::{sleep, Duration};
 use crate::models::{Stock, OrderType};
-use crate::traders::{run_trader,Trader};
-use crate::color::print_colored;
+use crate::traders::{run_trader, Trader};
+use crate::color::print_colored; // Import the print_colored function
 
 // Broker function: Handles stock updates and broadcasts them to traders
 pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, traders: Vec<Arc<Mutex<Trader>>>) {
@@ -46,35 +46,35 @@ pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, tr
                     stock = stock_rx.recv() => {
                         match stock {
                             Ok(stock) => {
-                                println!(
+                                print_colored(&format!(
                                     "Broker {} received stock: Symbol: {}, Price: ${:.2}",
                                     broker_id, stock.symbol, stock.price
-                                );
+                                ), "green");
 
                                 // Update the latest stock price
                                 stock_prices.insert(stock.symbol.clone(), stock.price);
 
                                 // Forward the stock update to traders
                                 if let Err(e) = trader_tx1.send(stock.clone()).await {
-                                    eprintln!("Broker {} failed to send stock update to trader 1: {:?}", broker_id, e);
+                                    print_colored(&format!("Broker {} failed to send stock update to trader 1: {:?}", broker_id, e), "red");
                                 }
                                 if let Err(e) = trader_tx2.send(stock.clone()).await {
-                                    eprintln!("Broker {} failed to send stock update to trader 2: {:?}", broker_id, e);
+                                    print_colored(&format!("Broker {} failed to send stock update to trader 2: {:?}", broker_id, e), "red");
                                 }
                                 if let Err(e) = trader_tx3.send(stock.clone()).await {
-                                    eprintln!("Broker {} failed to send stock update to trader 3: {:?}", broker_id, e);
+                                    print_colored(&format!("Broker {} failed to send stock update to trader 3: {:?}", broker_id, e), "red");
                                 }
 
                                 // Simulate broadcasting to traders
                                 sleep(Duration::from_millis(100)).await;
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
-                                println!(
+                                print_colored(&format!(
                                     "Broker {} lagged, missed {} messages", broker_id, count
-                                );
+                                ), "yellow");
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                println!("Broker {} channel closed", broker_id);
+                                print_colored(&format!("Broker {} channel closed", broker_id), "red");
                                 break;
                             }
                         }
@@ -82,46 +82,50 @@ pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, tr
                     order = order_rx.recv() => {
                         match order {
                             Some(order) => {
-                                println!(
+                                let color = match order.order_type {
+                                    OrderType::MarketBuy | OrderType::LimitBuy => "green",
+                                    OrderType::MarketSell | OrderType::LimitSell => "red",
+                                };
+                                print_colored(&format!(
                                     "Broker {} received order from Trader {}: {:?} {} shares of {}",
                                     broker_id, order.trader_id, order.order_type, order.quantity, order.stock_symbol
-                                );
+                                ), color);
                                 match order.order_type {
-                                    OrderType::MarketBuy => {
-                                        // Immediately process market buy orders
-                                        println!(
-                                            "Broker {} processed market buy order from Trader {}: {} shares of {}",
+                                    OrderType::MarketBuy | OrderType::LimitBuy => {
+                                        // Immediately process buy orders
+                                        print_colored(&format!(
+                                            "Broker {} processed buy order from Trader {}: {} shares of {}",
                                             broker_id, order.trader_id, order.quantity, order.stock_symbol
-                                        );
+                                        ), "green");
                                     }
-                                    OrderType::LimitBuy => {
-                                        // Process limit buy orders based on the current stock price
-                                        if let Some(limit_price) = order.limit_price {
-                                            if let Some(&current_price) = stock_prices.get(&order.stock_symbol) {
-                                                if current_price <= limit_price {
-                                                    println!(
-                                                        "Broker {} processed limit buy order from Trader {}: {} shares of {} at price ${:.2}",
-                                                        broker_id, order.trader_id, order.quantity, order.stock_symbol, limit_price
-                                                    );
-                                                } else {
-                                                    println!(
-                                                        "Broker {} could not process limit buy order from Trader {}: {} shares of {} at price ${:.2} (current price: ${:.2})",
-                                                        broker_id, order.trader_id, order.quantity, order.stock_symbol, limit_price, current_price
-                                                    );
-                                                }
-                                            } else {
-                                                println!(
-                                                    "Broker {} could not find current price for stock: {}",
-                                                    broker_id, order.stock_symbol
-                                                );
-                                            }
-                                        }
+                                    OrderType::MarketSell | OrderType::LimitSell => {
+                                        // Immediately process sell orders
+                                        print_colored(&format!(
+                                            "Broker {} processed sell order from Trader {}: {} shares of {}",
+                                            broker_id, order.trader_id, order.quantity, order.stock_symbol
+                                        ), "red");
                                     }
-                                    _ => {}
+                                }
+                                // Complete the order
+                                let trader = match &order.trader_id[..5] {
+                                    "B001-" => trader1.clone(),
+                                    "B002-" => trader2.clone(),
+                                    "B003-" => trader3.clone(),
+                                    _ => continue,
+                                };
+                                let mut trader = trader.lock().await;
+                                if let Some(&stock_price) = stock_prices.get(&order.stock_symbol) {
+                                    if let Err(e) = trader.complete_order(&order, stock_price) {
+                                        print_colored(&format!("Broker {} failed to complete order for Trader {}: {:?}", broker_id, order.trader_id, e), "red");
+                                    } else {
+                                        trader.remove_pending_order(&order);
+                                    }
+                                } else {
+                                    print_colored(&format!("Broker {} could not find stock price for order from Trader {}", broker_id, order.trader_id), "red");
                                 }
                             }
                             None => {
-                                println!("Broker {} order channel closed", broker_id);
+                                print_colored(&format!("Broker {} order channel closed", broker_id), "red");
                                 break;
                             }
                         }
