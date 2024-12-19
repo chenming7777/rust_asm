@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Barrier, mpsc, Mutex};
 use crate::models::Stock; // Import the Order struct
-use tokio::time::{sleep, Duration};
+// use tokio::time::{sleep, Duration};
 use crate::traders::{run_trader, Trader};
 use crate::color::print_colored; // Import the print_colored function
 use lapin::{Connection, ConnectionProperties, ExchangeKind, BasicProperties, options::*, types::FieldTable};
@@ -92,10 +92,10 @@ pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, tr
                                 // Simulate broadcasting to traders
                                 // sleep(Duration::from_millis(1000)).await;
                             }
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
-                                print_colored(&format!(
-                                    "Broker {} lagged, missed {} messages", broker_id, count
-                                ), "yellow");
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                                // print_colored(&format!(
+                                //     "Broker {} lagged, missed {} messages", broker_id, count
+                                // ), "yellow");
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                                 print_colored(&format!("Broker {} channel closed", broker_id), "red");
@@ -109,7 +109,7 @@ pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, tr
                                 print_colored(&format!(
                                     "Broker {} received order from Trader {}: {:?} {} shares of {}",
                                     broker_id, order.trader_id, order.order_type, order.quantity, order.stock_symbol
-                                ), "cyan");
+                                ), "yellow");
 
                                 // Serialize the order to JSON
                                 let serialized_order = serde_json::to_string(&order).unwrap();
@@ -175,10 +175,10 @@ pub async fn run_brokers(tx: broadcast::Sender<Stock>, barrier: Arc<Barrier>, tr
                                     if let Err(e) = trader.complete_order(&order, stock_prices.get(&order.stock_symbol).cloned().unwrap_or(0.0)) {
                                         println!("Broker {} failed to complete order for trader {}: {}", broker_id, trader_id, e);
                                     } else {
-                                        println!("Broker {} successfully completed order for trader {}: {:?}", broker_id, trader_id, order);
+                                        //println!("Broker {} successfully completed order for trader {}: {:?}", broker_id, trader_id, order);
                                     }
                                 } else {
-                                    print_colored(&format!("Broker {} could not find pending order from trader id: {} (trader revert the order) ", broker_id, status_update.order_id), "yellow");
+                                    // print_colored(&format!("Broker {} could not find pending order from trader id: {} (trader revert the order) ", broker_id, status_update.order_id), "yellow");
                                     // Clean the pending order with that order ID
                                     trader.remove_pending_order(&status_update.order_id);
                                 }

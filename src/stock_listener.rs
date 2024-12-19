@@ -23,7 +23,7 @@ pub async fn run_stock_listener(
     println!("Connected to RabbitMQ");
 
     let channel = conn.create_channel().await?;
-    println!("Channel created");
+    //println!("Channel created");
 
     // Declare an exchange
     channel.exchange_declare(
@@ -32,7 +32,7 @@ pub async fn run_stock_listener(
         ExchangeDeclareOptions::default(),
         FieldTable::default(),
     ).await?;
-    println!("Exchange declared");
+    //println!("Exchange declared");
 
     // Declare a queue
     let queue = channel.queue_declare(
@@ -40,7 +40,7 @@ pub async fn run_stock_listener(
         QueueDeclareOptions::default(),
         FieldTable::default(),
     ).await?;
-    println!("Queue declared: {:?}", queue.name());
+    //println!("Queue declared: {:?}", queue.name());
 
     // Bind the queue to the exchange
     channel.queue_bind(
@@ -50,7 +50,7 @@ pub async fn run_stock_listener(
         QueueBindOptions::default(),
         FieldTable::default(),
     ).await?;
-    println!("Queue bound to exchange");
+    //println!("Queue bound to exchange");
 
     // Consume messages from the queue
     let mut consumer = channel.basic_consume(
@@ -59,7 +59,7 @@ pub async fn run_stock_listener(
         BasicConsumeOptions::default(),
         FieldTable::default(),
     ).await?;
-    println!("Consumer created");
+    //println!("Consumer created");
 
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.expect("error in consumer");

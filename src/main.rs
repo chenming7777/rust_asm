@@ -136,9 +136,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         trader.cancel_pending_orders();
     }
 
-    // Sleep for 5 seconds before displaying portfolios
+    // Sleep for 3 seconds before displaying portfolios
     println!("Marketing closing generating all trader performance...");
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(3)).await;
 
     // Display all trader portfolios
     let trader_refs: Vec<_> = join_all(traders.iter().map(|t| async {

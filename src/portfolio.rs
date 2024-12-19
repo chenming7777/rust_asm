@@ -1,6 +1,8 @@
 use crate::traders::Trader;
 use crate::models::Order;
 use crate::stock_listener::StockStore;
+use crate::color::print_colored;
+
 
 #[derive(Debug)]
 pub struct Portfolio {
@@ -32,24 +34,32 @@ impl Portfolio {
             cash_left: trader.cash,
             held_stocks,
             total_amount,
-            profit_loss: total_amount - 5000.0, // Assuming initial cash was 5000.0
+            profit_loss: total_amount - 5000.0,
             pending_orders: trader.pending_orders.clone(), // Include pending orders
         }
     }
 
+ 
+
     pub fn display(&self) {
-        println!("Trader ID: {}", self.trader_id);
-        println!("Cash Left: ${:.2}", self.cash_left);
-        println!("Held Stocks:");
+        print_colored(&format!("Trader ID: {}", self.trader_id), "blue");
+        print_colored(&format!("Cash Left: ${:.2}", self.cash_left), "green");
+        print_colored("Held Stocks:", "yellow");
         for stock in &self.held_stocks {
-            println!(
-                "  Symbol: {}, Latest Price: ${:.2}, Average Cost: ${:.2}, Quantity: {}",
-                stock.0, stock.1, stock.2, stock.3
+            print_colored(
+                &format!(
+                    "  Symbol: {}, Latest Price: ${:.2}, Average Cost per stock: ${:.2}, Quantity: {}",
+                    stock.0, stock.1, stock.2, stock.3
+                ),
+                "cyan"
             );
         }
-        println!("Total Amount: ${:.2}", self.total_amount);
-        println!("Profit/Loss: ${:.2}", self.profit_loss);
-        println!("Pending Orders: {:?}", self.pending_orders); // Display pending orders
+        print_colored(&format!("Total Amount: ${:.2}", self.total_amount), "magenta");
+    
+        let profit_loss_color = if self.profit_loss >= 0.0 { "green" } else { "red" };
+        print_colored(&format!("Profit/Loss: ${:.2}", self.profit_loss), profit_loss_color);
+    
+        print_colored(&format!("Pending Orders: {:?}", self.pending_orders), "yellow");
     }
 }
 

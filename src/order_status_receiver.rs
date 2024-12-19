@@ -27,7 +27,7 @@ pub async fn run_order_status_receiver() -> Result<(), Box<dyn std::error::Error
         FieldTable::default(),
     ).await?;
 
-    println!("Order Status Listener: Waiting for order status updates...");
+    //println!("Order Status Listener: Waiting for order status updates...");
 
     // Receive messages in a loop
     while let Some(delivery) = consumer.next().await {
