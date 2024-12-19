@@ -65,8 +65,8 @@ pub async fn run_stock_listener(
         let delivery = delivery.expect("error in consumer");
         let stock: Stock = serde_json::from_slice(&delivery.data)?;
 
-        // Log the received stock update
-        println!("Received stock update: {:?}", stock);
+        // // Log the received stock update
+        // println!("Received stock update: {:?}", stock);
 
         // Update the stock store
         let mut store = stock_store.write().await;
@@ -74,11 +74,11 @@ pub async fn run_stock_listener(
         if let Some(existing_stock) = store.get(&symbol) {
             if (existing_stock.price - stock.price).abs() > f64::EPSILON {
                 store.insert(symbol.clone(), stock.clone());
-                println!("Updated stock: {:?}", stock);
+                // println!("Updated stock: {:?}", stock);
             }
         } else {
             store.insert(symbol.clone(), stock.clone());
-            println!("Added new stock: {:?}", stock);
+            // println!("Added new stock: {:?}", stock);
         }
 
         // Broadcast the stock update
